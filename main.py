@@ -94,6 +94,12 @@ class ASLRecognizer:
                     # Extract hand landmarks for prediction
                     landmarks = extract_hand_landmarks(hand_landmarks)
                     
+                    # Reshape landmarks to match model input shape (21, 3)
+                    landmarks = landmarks.reshape(21, 3)
+                    
+                    # Normalize the coordinates
+                    landmarks = (landmarks - np.mean(landmarks)) / np.std(landmarks)
+                    
                     # Make prediction
                     prediction = self.model.predict(np.array([landmarks]))
                     predicted_class = self.gesture_classes[np.argmax(prediction[0])]

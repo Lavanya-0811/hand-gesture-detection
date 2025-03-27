@@ -33,30 +33,56 @@ def load_dataset(data_dir):
             sample_path = os.path.join(class_path, sample_file)
             landmarks = np.load(sample_path)
             
+            # Reshape landmarks to 21x3 (21 landmarks, 3 coordinates each)
+            landmarks = landmarks.reshape(21, 3)
+            
+            # Normalize the coordinates
+            landmarks = (landmarks - np.mean(landmarks)) / np.std(landmarks)
+            
             X.append(landmarks)
             y.append(ord(class_dir) - ord('A'))  # Convert letter to index (0-25)
     
     return np.array(X), np.array(y)
 
-def create_model(input_shape, num_classes):
+def create_cnn_model(input_shape, num_classes):
     """
-    Create a neural network model for ASL recognition.
+    Create a CNN model for ASL recognition.
     
     Args:
-        input_shape: Shape of input data
+        input_shape: Shape of input data (21, 3)
         num_classes: Number of gesture classes
         
     Returns:
         Compiled model
     """
-    model = models.Sequential([
-        layers.Dense(256, activation='relu', input_shape=input_shape),
-        layers.Dropout(0.3),
-        layers.Dense(128, activation='relu'),
-        layers.Dropout(0.3),
-        layers.Dense(64, activation='relu'),
-        layers.Dense(num_classes, activation='softmax')
-    ])
+    # Create input layer
+    inputs = layers.Input(shape=input_shape)
+    
+    # First Convolutional Block
+    x = layers.Conv1D(64, 3, activation='relu', padding='same')(inputs)
+    x = layers.BatchNormalization()(x)
+    x = layers.MaxPooling1D(2, padding='same')(x)
+    
+    # Second Convolutional Block
+    x = layers.Conv1D(128, 3, activation='relu', padding='same')(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.MaxPooling1D(2, padding='same')(x)
+    
+    # Third Convolutional Block
+    x = layers.Conv1D(256, 3, activation='relu', padding='same')(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.MaxPooling1D(2, padding='same')(x)
+    
+    # Flatten and Dense Layers
+    x = layers.Flatten()(x)
+    x = layers.Dense(512, activation='relu')(x)
+    x = layers.Dropout(0.5)(x)
+    x = layers.Dense(256, activation='relu')(x)
+    x = layers.Dropout(0.3)(x)
+    outputs = layers.Dense(num_classes, activation='softmax')(x)
+    
+    # Create model
+    model = models.Model(inputs=inputs, outputs=outputs)
     
     model.compile(
         optimizer='adam',
@@ -114,9 +140,12 @@ def main():
         X, y, test_size=0.2, random_state=42
     )
     
-    # Create and compile the model
-    print("Creating model...")
-    model = create_model(input_shape=(X.shape[1],), num_classes=26)
+    # Create and compile the CNN model
+    print("Creating CNN model...")
+    model = create_cnn_model(input_shape=(21, 3), num_classes=26)
+    
+    # Print model summary
+    model.summary()
     
     # Train the model
     print("Training model...")
@@ -124,7 +153,14 @@ def main():
         X_train, y_train,
         epochs=50,
         batch_size=32,
-        validation_data=(X_val, y_val)
+        validation_data=(X_val, y_val),
+        callbacks=[
+            tf.keras.callbacks.EarlyStopping(
+                monitor='val_loss',
+                patience=5,
+                restore_best_weights=True
+            )
+        ]
     )
     
     # Plot training history
